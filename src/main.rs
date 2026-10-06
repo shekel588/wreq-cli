@@ -8,15 +8,6 @@ use wreq_util::{Emulation, Platform, Profile};
 
 #[derive(ValueEnum, Clone, Copy, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
-enum BrowserTarget {
-    Chrome,
-    Firefox,
-    Safari,
-    Edge,
-}
-
-#[derive(ValueEnum, Clone, Copy, Debug, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
 enum OsTarget {
     Auto,
     Windows,
@@ -28,12 +19,12 @@ enum OsTarget {
 
 #[derive(Deserialize, Default, Debug)]
 struct Config {
-    browser: Option<BrowserTarget>,
+    emulation: Option<String>,
     os: Option<OsTarget>,
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "wreq", about = "Fast stealth HTTP client with host OS matching & browser TLS/HTTP2 impersonation")]
+#[command(name = "wreq", about = "Fast stealth HTTP client with browser TLS/HTTP2 impersonation")]
 struct Args {
     /// URL to fetch
     #[arg(required = true)]
@@ -43,12 +34,13 @@ struct Args {
     #[arg(short = 'X', long = "method", default_value = "GET")]
     method: String,
 
-    /// Browser to impersonate: chrome, firefox, safari, edge
-    #[arg(short = 'b', long = "browser", value_enum)]
-    browser: Option<BrowserTarget>,
+    /// Explicit browser/fingerprint override (e.g. chrome, firefox, safari, edge, chrome_137, safari_26)
+    /// If not specified: latest Chrome for current host OS
+    #[arg(short = 'e', long = "emulation", alias = "impersonate", short_alias = 'i')]
+    emulation: Option<String>,
 
-    /// Target OS fingerprint: auto, windows, macos, linux, android, ios (default: auto = host OS)
-    #[arg(long = "os", value_enum)]
+    /// Override target OS (auto, windows, macos, linux, android, ios). Default: host OS
+    #[arg(long = "os", alias = "platform", value_enum)]
     os: Option<OsTarget>,
 
     /// Path to custom config file (default: ~/.wreq.toml or ./wreq.toml)
@@ -72,7 +64,7 @@ struct Args {
     head_only: bool,
 
     /// Print response status and headers alongside body
-    #[arg(short = 'i', long = "include")]
+    #[arg(short = 'v', long = "verbose", alias = "include")]
     include_headers: bool,
 }
 
@@ -128,20 +120,32 @@ fn resolve_platform(os: Option<OsTarget>, config_os: Option<OsTarget>) -> Platfo
     }
 }
 
+fn resolve_profile(input: Option<&str>, config_val: Option<&str>) -> Profile {
+    let name = input.or(config_val).unwrap_or("chrome");
+    match name.to_lowercase().as_str() {
+        "chrome" => Profile::Chrome137,
+        "firefox" => Profile::Firefox136,
+        "safari" => Profile::Safari26,
+        "edge" => Profile::Edge137,
+        "opera" => Profile::Opera126,
+        custom => {
+            serde_json::from_str::<Profile>(&format!("\"{}\"", custom))
+                .or_else(|_| serde_json::from_str::<Profile>(&format!("\"{}\"", custom.to_lowercase())))
+                .unwrap_or_else(|_| {
+                    eprintln!("Warning: unknown profile '{}', falling back to default Chrome", custom);
+                    Profile::Chrome137
+                })
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let config = load_config(args.config.as_deref());
 
-    let browser = args.browser.or(config.browser).unwrap_or(BrowserTarget::Chrome);
+    let profile = resolve_profile(args.emulation.as_deref(), config.emulation.as_deref());
     let platform = resolve_platform(args.os, config.os);
-
-    let profile = match browser {
-        BrowserTarget::Chrome => Profile::Chrome137,
-        BrowserTarget::Firefox => Profile::Firefox136,
-        BrowserTarget::Safari => Profile::Safari26,
-        BrowserTarget::Edge => Profile::Edge137,
-    };
 
     let emulation = Emulation::builder()
         .profile(profile)
