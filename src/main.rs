@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bytes = resp.bytes().await?;
 
     if let Some(out_path) = args.output {
-        let mut file = File::create(out_path)?;
+        let mut file = File::create(&out_path)?;
         file.write_all(&bytes)?;
         eprintln!("Saved to {}", out_path);
     } else {
