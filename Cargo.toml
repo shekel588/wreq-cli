@@ -1,0 +1,11 @@
+[package]
+name = "wreq-cli"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance stealth HTTP client CLI using wreq & BoringSSL with JA3/JA4 browser impersonation"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+wreq = { version = "0.16.1", default-features = false, features = ["gzip", "brotli", "zstd", "json", "cookies", "form", "multipart"] }
+wreq-util = { version = "0.2.0", features = ["emulation"] }
+clap = { version = "4.5", features = ["derive"] }
