@@ -23,6 +23,9 @@ jobs:
       - name: Setup NASM
         uses: ilammy/setup-nasm@v1
 
+      - name: Cache Cargo Dependencies
+        uses: Swatinem/rust-cache@v2
+
       - name: Build Release Binary
         run: cargo build --release
 
