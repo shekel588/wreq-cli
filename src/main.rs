@@ -1,30 +1,11 @@
-use clap::{Parser, ValueEnum};
-use serde::Deserialize;
+use clap::Parser;
 use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
 use wreq::Client;
 use wreq_util::{Emulation, Platform, Profile};
 
-#[derive(ValueEnum, Clone, Copy, Debug, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-enum OsTarget {
-    Auto,
-    Windows,
-    Macos,
-    Linux,
-    Android,
-    Ios,
-}
-
-#[derive(Deserialize, Default, Debug)]
-struct Config {
-    emulation: Option<String>,
-    os: Option<OsTarget>,
-}
-
 #[derive(Parser, Debug)]
-#[command(name = "wreq", about = "Fast stealth HTTP client with browser TLS/HTTP2 impersonation")]
+#[command(name = "wreq", about = "Fast stealth HTTP client with browser TLS & HTTP/2 impersonation")]
 struct Args {
     /// URL to fetch
     #[arg(required = true)]
@@ -34,18 +15,10 @@ struct Args {
     #[arg(short = 'X', long = "method", default_value = "GET")]
     method: String,
 
-    /// Explicit browser/fingerprint override (e.g. chrome, firefox, safari, edge, chrome_137, safari_26)
-    /// If not specified: latest Chrome for current host OS
+    /// Fingerprint override (e.g. chrome, firefox, safari, safari_26, chrome_137)
+    /// Default: latest Chrome matching the host OS
     #[arg(short = 'e', long = "emulation", alias = "impersonate", short_alias = 'i')]
     emulation: Option<String>,
-
-    /// Override target OS (auto, windows, macos, linux, android, ios). Default: host OS
-    #[arg(long = "os", alias = "platform", value_enum)]
-    os: Option<OsTarget>,
-
-    /// Path to custom config file (default: ~/.wreq.toml or ./wreq.toml)
-    #[arg(short = 'c', long = "config")]
-    config: Option<PathBuf>,
 
     /// Add custom header (e.g. -H "Authorization: Bearer xxx")
     #[arg(short = 'H', long = "header")]
@@ -68,89 +41,59 @@ struct Args {
     include_headers: bool,
 }
 
-fn load_config(custom_path: Option<&Path>) -> Config {
-    let candidates = if let Some(p) = custom_path {
-        vec![p.to_path_buf()]
-    } else {
-        let mut list = vec![PathBuf::from("wreq.toml")];
-        if let Ok(home) = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")) {
-            list.push(PathBuf::from(&home).join(".wreq.toml"));
-            list.push(PathBuf::from(&home).join(".config").join("wreq").join("config.toml"));
-        }
-        list
-    };
-
-    for path in candidates {
-        if path.is_file() {
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                if let Ok(cfg) = toml::from_str::<Config>(&content) {
-                    return cfg;
-                }
-            }
-        }
-    }
-
-    Config::default()
-}
-
-fn detect_host_os() -> Platform {
+fn host_platform() -> Platform {
     if cfg!(target_os = "windows") {
         Platform::Windows
     } else if cfg!(target_os = "macos") {
         Platform::MacOS
     } else if cfg!(target_os = "linux") {
         Platform::Linux
-    } else if cfg!(target_os = "android") {
-        Platform::Android
-    } else if cfg!(target_os = "ios") {
-        Platform::IOS
     } else {
         Platform::Windows
     }
 }
 
-fn resolve_platform(os: Option<OsTarget>, config_os: Option<OsTarget>) -> Platform {
-    match os.or(config_os).unwrap_or(OsTarget::Auto) {
-        OsTarget::Auto => detect_host_os(),
-        OsTarget::Windows => Platform::Windows,
-        OsTarget::Macos => Platform::MacOS,
-        OsTarget::Linux => Platform::Linux,
-        OsTarget::Android => Platform::Android,
-        OsTarget::Ios => Platform::IOS,
-    }
-}
+fn resolve_emulation(explicit: Option<&str>) -> Emulation {
+    match explicit {
+        None => Emulation::builder()
+            .profile(Profile::Chrome137)
+            .platform(host_platform())
+            .build(),
+        Some(name) => match name.to_lowercase().as_str() {
+            "chrome" => Emulation::builder()
+                .profile(Profile::Chrome137)
+                .platform(host_platform())
+                .build(),
+            "firefox" => Emulation::builder()
+                .profile(Profile::Firefox136)
+                .platform(host_platform())
+                .build(),
+            "safari" => Emulation::builder()
+                .profile(Profile::Safari26)
+                .platform(Platform::MacOS)
+                .build(),
+            "edge" => Emulation::builder()
+                .profile(Profile::Edge137)
+                .platform(host_platform())
+                .build(),
+            custom => {
+                let profile = serde_json::from_str::<Profile>(&format!("\"{}\"", custom))
+                    .or_else(|_| serde_json::from_str::<Profile>(&format!("\"{}\"", custom.to_lowercase())))
+                    .unwrap_or(Profile::Chrome137);
 
-fn resolve_profile(input: Option<&str>, config_val: Option<&str>) -> Profile {
-    let name = input.or(config_val).unwrap_or("chrome");
-    match name.to_lowercase().as_str() {
-        "chrome" => Profile::Chrome137,
-        "firefox" => Profile::Firefox136,
-        "safari" => Profile::Safari26,
-        "edge" => Profile::Edge137,
-        "opera" => Profile::Opera126,
-        custom => {
-            serde_json::from_str::<Profile>(&format!("\"{}\"", custom))
-                .or_else(|_| serde_json::from_str::<Profile>(&format!("\"{}\"", custom.to_lowercase())))
-                .unwrap_or_else(|_| {
-                    eprintln!("Warning: unknown profile '{}', falling back to default Chrome", custom);
-                    Profile::Chrome137
-                })
-        }
+                Emulation::builder()
+                    .profile(profile)
+                    .platform(host_platform())
+                    .build()
+            }
+        },
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    let config = load_config(args.config.as_deref());
-
-    let profile = resolve_profile(args.emulation.as_deref(), config.emulation.as_deref());
-    let platform = resolve_platform(args.os, config.os);
-
-    let emulation = Emulation::builder()
-        .profile(profile)
-        .platform(platform)
-        .build();
+    let emulation = resolve_emulation(args.emulation.as_deref());
 
     let client = Client::builder()
         .emulation(emulation)
