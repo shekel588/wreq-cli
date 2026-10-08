@@ -7,6 +7,6 @@ description = "Fast stealth HTTP client with browser TLS & HTTP/2 impersonation"
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 wreq = { version = "0.16.1", features = ["tokio-rt", "gzip", "brotli", "zstd", "json", "cookies", "form", "multipart"] }
-wreq-util = { version = "0.2.0", features = ["emulation", "emulation-serde"] }
+wreq-util = { git = "https://github.com/0x676e67/wreq-util", branch = "main", features = ["emulation", "emulation-serde"] }
 clap = { version = "4.5", features = ["derive"] }
 serde_json = "1"

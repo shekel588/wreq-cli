@@ -53,47 +53,71 @@ fn host_platform() -> Platform {
     }
 }
 
-fn resolve_emulation(explicit: Option<&str>) -> Emulation {
-    match explicit {
-        None => Emulation::builder()
-            .profile(Profile::Chrome137)
-            .platform(host_platform())
-            .build(),
-        Some(name) => match name.to_lowercase().as_str() {
-            "chrome" => Emulation::builder()
-                .profile(Profile::Chrome137)
-                .platform(host_platform())
-                .build(),
-            "firefox" => Emulation::builder()
-                .profile(Profile::Firefox136)
-                .platform(host_platform())
-                .build(),
-            "safari" => Emulation::builder()
-                .profile(Profile::Safari26)
-                .platform(Platform::MacOS)
-                .build(),
-            "edge" => Emulation::builder()
-                .profile(Profile::Edge137)
-                .platform(host_platform())
-                .build(),
-            custom => {
-                let profile = serde_json::from_str::<Profile>(&format!("\"{}\"", custom))
-                    .or_else(|_| serde_json::from_str::<Profile>(&format!("\"{}\"", custom.to_lowercase())))
-                    .unwrap_or(Profile::Chrome137);
+const DEFAULT_ETALON_PATH: &str = r"C:\Users\kevin\OneDrive\Документы\chrome154tls-etalon.json";
 
-                Emulation::builder()
-                    .profile(profile)
-                    .platform(host_platform())
-                    .build()
+fn resolve_emulation(explicit: Option<&str>) -> (Emulation, Option<String>) {
+    if let Some(target) = explicit {
+        let p = std::path::Path::new(target);
+        if p.is_file() {
+            if let Ok(content) = std::fs::read_to_string(p) {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    let custom_ua = json.get("user_agent").and_then(|u| u.as_str()).map(|s| s.to_string());
+                    return (
+                        Emulation::builder()
+                            .profile(Profile::Chrome154)
+                            .platform(host_platform())
+                            .build(),
+                        custom_ua,
+                    );
+                }
+            }
+        }
+    }
+
+    let (profile, platform) = match explicit {
+        None => (Profile::Chrome154, host_platform()),
+        Some(name) => match name.to_lowercase().as_str() {
+            "chrome" | "default" | "etalon" | "chrome_154" => {
+                (Profile::Chrome154, host_platform())
+            }
+            "chrome_137" => (Profile::Chrome137, host_platform()),
+            "firefox" => (Profile::Firefox136, host_platform()),
+            "safari" => (Profile::Safari26, Platform::MacOS),
+            "edge" => (Profile::Edge137, host_platform()),
+            custom => {
+                let p = serde_json::from_str::<Profile>(&format!("\"{}\"", custom))
+                    .or_else(|_| serde_json::from_str::<Profile>(&format!("\"{}\"", custom.to_lowercase())))
+                    .unwrap_or(Profile::Chrome154);
+                (p, host_platform())
             }
         },
-    }
+    };
+
+    let custom_ua = if explicit.is_none() {
+        if let Ok(content) = std::fs::read_to_string(DEFAULT_ETALON_PATH) {
+            serde_json::from_str::<serde_json::Value>(&content)
+                .ok()
+                .and_then(|v| v.get("user_agent").and_then(|u| u.as_str()).map(|s| s.to_string()))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    (
+        Emulation::builder()
+            .profile(profile)
+            .platform(platform)
+            .build(),
+        custom_ua,
+    )
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    let emulation = resolve_emulation(args.emulation.as_deref());
+    let (emulation, custom_ua) = resolve_emulation(args.emulation.as_deref());
 
     let client = Client::builder()
         .emulation(emulation)
@@ -106,6 +130,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "HEAD" => client.head(&args.url),
         _ => client.get(&args.url),
     };
+
+    if let Some(ua) = custom_ua {
+        req = req.header("user-agent", ua);
+    }
 
     for h in args.headers {
         if let Some((k, v)) = h.split_once(':') {
