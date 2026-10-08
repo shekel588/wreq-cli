@@ -13,3 +13,6 @@ serde_json = "1"
 
 [patch.crates-io]
 wreq = { git = "https://github.com/0x676e67/wreq", branch = "main" }
+btls = { git = "https://github.com/0x676e67/btls", branch = "main" }
+btls-sys = { git = "https://github.com/0x676e67/btls", branch = "main" }
+tokio-btls = { git = "https://github.com/0x676e67/btls", branch = "main" }
