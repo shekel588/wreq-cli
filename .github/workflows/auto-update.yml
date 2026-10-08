@@ -1,0 +1,173 @@
+name: Upstream Sync & Auto-Release
+
+on:
+  schedule:
+    - cron: '0 4 * * *'  # Once a day at 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force build and release regardless of upstream diff'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  check-upstream:
+    name: Check Upstream wreq & Chrome Profiles
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      tag: ${{ steps.check.outputs.tag }}
+      version: ${{ steps.check.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup minimal Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Update upstream git dependencies
+        run: |
+          cargo update -p wreq -p wreq-util -p btls -p btls-sys -p tokio-btls
+
+      - name: Analyze diff (Signal vs Noise)
+        id: check
+        shell: bash
+        run: |
+          GIT_DIFF=$(git diff Cargo.lock)
+          echo "=== Git Diff in Cargo.lock ==="
+          echo "$GIT_DIFF"
+
+          UPSTREAM_CHANGED=false
+          if echo "$GIT_DIFF" | grep -E '^\+.*github\.com/0x676e67/' > /dev/null; then
+            UPSTREAM_CHANGED=true
+          fi
+
+          if [ "${{ github.event.inputs.force_release }}" = "true" ]; then
+            UPSTREAM_CHANGED=true
+          fi
+
+          if [ "$UPSTREAM_CHANGED" = "false" ]; then
+            echo "No relevant upstream changes in 0x676e67 packages. Skipping release."
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Relevant upstream change detected!"
+          echo "should_release=true" >> $GITHUB_OUTPUT
+
+          # Read current version from Cargo.toml
+          CURRENT_VERSION=$(grep -m1 '^version =' Cargo.toml | cut -d '"' -f2)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          TAG="v${NEW_VERSION}"
+
+          echo "Bumping version: $CURRENT_VERSION -> $NEW_VERSION"
+          sed -i "0,/^version = .*/s/^version = .*/version = \"$NEW_VERSION\"/" Cargo.toml
+
+          # Sync Cargo.lock with new package version
+          cargo check --quiet || true
+
+          # Commit and tag
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore(release): bump version to ${NEW_VERSION} (upstream sync)"
+          git tag "$TAG"
+
+          # Push only main and the specific new tag
+          git push origin main "$TAG"
+
+          echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+  build-release:
+    name: Build & Publish Release
+    needs: check-upstream
+    if: needs.check-upstream.outputs.should_release == 'true' || github.event.inputs.force_release == true
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup NASM
+        uses: ilammy/setup-nasm@v1
+
+      - name: Cache Cargo Dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Release Binary
+        run: cargo build --release
+
+      - name: Verify Binary
+        shell: pwsh
+        run: |
+          $ver = .\target\release\wreq.exe --version
+          Write-Host "Verified binary: $ver"
+
+      - name: Package Release Assets & Compute Hashes
+        id: pkg
+        shell: pwsh
+        run: |
+          $version = (Get-Content Cargo.toml | Select-String '^version = "(.*)"').Matches.Groups[1].Value
+          $tag = "v$version"
+          echo "VERSION=$version" >> $env:GITHUB_ENV
+          echo "TAG=$tag" >> $env:GITHUB_ENV
+
+          # Package zip
+          Compress-Archive -Path target/release/wreq.exe -DestinationPath wreq-windows-x64.zip -Force
+
+          # SHA256 checksums
+          $zipHash = (Get-FileHash -Algorithm SHA256 wreq-windows-x64.zip).Hash.ToLower()
+          "$zipHash  wreq-windows-x64.zip" | Out-File -Encoding utf8 -NoNewline wreq-windows-x64.zip.sha256
+
+          $exeHash = (Get-FileHash -Algorithm SHA256 target/release/wreq.exe).Hash.ToLower()
+          "$exeHash  wreq.exe" | Out-File -Encoding utf8 -NoNewline wreq.exe.sha256
+
+          echo "ZIP_HASH=$zipHash" >> $env:GITHUB_ENV
+
+          # Update Scoop bucket/wreq.json
+          $manifestPath = "bucket/wreq.json"
+          if (Test-Path $manifestPath) {
+            $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+            $manifest.version = $version
+            $manifest.architecture.'64bit'.url = "https://github.com/shekel588/wreq-cli/releases/download/$tag/wreq-windows-x64.zip"
+            $manifest.architecture.'64bit'.hash = $zipHash
+            $manifest | ConvertTo-Json -Depth 10 | Set-Content $manifestPath -Encoding utf8
+          }
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: |
+            target/release/wreq.exe
+            wreq-windows-x64.zip
+            wreq-windows-x64.zip.sha256
+            wreq.exe.sha256
+          generate_release_notes: true
+
+      - name: Push Updated Scoop Manifest
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bucket/wreq.json
+          $status = git status --porcelain
+          if ($status) {
+            git commit -m "chore(scoop): update manifest for ${{ env.TAG }}"
+            git push origin main
+          }

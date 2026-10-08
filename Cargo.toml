@@ -4,6 +4,10 @@ version = "0.3.0"
 edition = "2021"
 description = "Fast stealth HTTP client with browser TLS & HTTP/2 impersonation"
 
+[[bin]]
+name = "wreq"
+path = "src/main.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 wreq = { git = "https://github.com/0x676e67/wreq", branch = "main", features = ["tokio-rt", "gzip", "brotli", "zstd", "json", "cookies", "form", "multipart", "chromium-roots"] }

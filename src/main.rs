@@ -5,7 +5,7 @@ use wreq::Client;
 use wreq_util::{Emulation, Platform, Profile};
 
 #[derive(Parser, Debug)]
-#[command(name = "wreq", about = "Fast stealth HTTP client with browser TLS & HTTP/2 impersonation")]
+#[command(name = "wreq", version, about = "Fast stealth HTTP client with browser TLS & HTTP/2 impersonation")]
 struct Args {
     /// URL to fetch
     #[arg(required = true)]
