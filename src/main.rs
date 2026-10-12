@@ -2,6 +2,7 @@ use clap::Parser;
 use std::fs::File;
 use std::io::Write;
 use std::net::{IpAddr, SocketAddr};
+use wreq::redirect::Policy;
 use wreq::{Client, Proxy};
 use wreq_util::{Emulation, Platform, Profile};
 
@@ -57,6 +58,11 @@ struct Args {
     /// Proxy URL (http://, https://, socks5://, socks5h://)
     #[arg(short = 'x', long = "proxy")]
     proxy: Option<String>,
+
+    /// Do not follow redirects (default: follow up to 10 hops).
+    /// Short aliases -n and -f combine as -nf.
+    #[arg(short = 'n', long = "nofollow", short_alias = 'f')]
+    nofollow: bool,
 }
 
 fn host_platform() -> Platform {
@@ -185,6 +191,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|e| format!("invalid --proxy '{proxy_url}': {e}"))?;
         builder = builder.proxy(proxy);
     }
+
+    builder = builder.redirect(if args.nofollow {
+        Policy::none()
+    } else {
+        Policy::limited(10)
+    });
 
     let client = builder.build()?;
 
