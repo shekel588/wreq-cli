@@ -2,7 +2,7 @@
 
 Notable changes to wreq-cli. Format follows [Keep a Changelog](https://keepachangelog.com/); versions track `Cargo.toml` / release tags.
 
-## [Unreleased]
+## [0.4.3] — 2026-10-12
 
 ### Added
 - Redirects are followed by default (up to 10 hops; error past that). Disable with `--nofollow` — short `-n`, combined `-nf`.
