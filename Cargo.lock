@@ -1349,7 +1349,7 @@ dependencies = [
 
 [[package]]
 name = "wreq-cli"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "clap",
  "serde_json",
