@@ -1,15 +1,15 @@
 use clap::Parser;
 use std::fs::File;
 use std::io::Write;
-use wreq::Client;
+use std::net::{IpAddr, SocketAddr};
+use wreq::{Client, Proxy};
 use wreq_util::{Emulation, Platform, Profile};
 
 #[derive(Parser, Debug)]
 #[command(name = "wreq", version, about = "Fast stealth HTTP client with browser TLS & HTTP/2 impersonation")]
 struct Args {
-    /// URL to fetch
-    #[arg(required = true)]
-    url: String,
+    /// URL to fetch (omit to print the active fingerprint banner)
+    url: Option<String>,
 
     /// HTTP method (GET, POST, PUT, DELETE, HEAD)
     #[arg(short = 'X', long = "method", default_value = "GET")]
@@ -39,6 +39,24 @@ struct Args {
     /// Print response status and headers alongside body
     #[arg(short = 'v', long = "verbose", alias = "include")]
     include_headers: bool,
+
+    /// Pin a hostname to a fixed IP, curl-style: "host:ip" or "host:port:ip" (repeatable).
+    /// Port is kept for curl compatibility but ignored by the resolver — put the
+    /// port in the URL itself instead.
+    #[arg(long = "resolve")]
+    resolve: Vec<String>,
+
+    /// Skip TLS certificate verification (self-signed / stale-certs origins)
+    #[arg(short = 'k', long = "insecure")]
+    insecure: bool,
+
+    /// Cookie to send, e.g. "name=value" (repeatable, joined with "; ")
+    #[arg(short = 'c', long = "cookie")]
+    cookies: Vec<String>,
+
+    /// Proxy URL (http://, https://, socks5://, socks5h://)
+    #[arg(short = 'x', long = "proxy")]
+    proxy: Option<String>,
 }
 
 fn host_platform() -> Platform {
@@ -53,8 +71,27 @@ fn host_platform() -> Platform {
     }
 }
 
-fn resolve_emulation(explicit: Option<&str>) -> Emulation {
-    let (profile, platform) = match explicit {
+fn platform_name(platform: Platform) -> &'static str {
+    match platform {
+        Platform::Windows => "Windows",
+        Platform::MacOS => "macOS",
+        Platform::Linux => "Linux",
+    }
+}
+
+fn profile_label(profile: &Profile) -> String {
+    match profile {
+        Profile::Chrome154 => "Chrome 154".into(),
+        Profile::Chrome137 => "Chrome 137".into(),
+        Profile::Firefox136 => "Firefox 136".into(),
+        Profile::Safari26 => "Safari 26".into(),
+        Profile::Edge137 => "Edge 137".into(),
+        _ => "custom profile".into(),
+    }
+}
+
+fn select_profile(explicit: Option<&str>) -> (Profile, Platform) {
+    match explicit {
         None | Some("chrome" | "default" | "etalon" | "chrome_154") => {
             (Profile::Chrome154, host_platform())
         }
@@ -68,7 +105,11 @@ fn resolve_emulation(explicit: Option<&str>) -> Emulation {
                 .unwrap_or(Profile::Chrome154);
             (p, host_platform())
         }
-    };
+    }
+}
+
+fn resolve_emulation(explicit: Option<&str>) -> Emulation {
+    let (profile, platform) = select_profile(explicit);
 
     Emulation::builder()
         .profile(profile)
@@ -76,27 +117,92 @@ fn resolve_emulation(explicit: Option<&str>) -> Emulation {
         .build()
 }
 
+fn banner(args: &Args, profile: &Profile, platform: Platform) {
+    let name = profile_label(profile);
+    let source = match (&args.emulation, name.as_str()) {
+        (None, _) => "default",
+        (Some(e), "custom profile") => e.as_str(),
+        (Some(_), _) => "-e override",
+    };
+    println!("wreq {} — stealth HTTP client (browser TLS & HTTP/2 impersonation)", env!("CARGO_PKG_VERSION"));
+    println!();
+    println!("  Active fingerprint : {} on {}   [{}]", name, platform_name(platform), source);
+    println!("  Override with      : -e chrome_154 | chrome_137 | firefox | safari | edge");
+    println!();
+    println!("  Usage: wreq [OPTIONS] <URL>");
+    println!("  Help : wreq --help");
+}
+
+fn parse_resolve(spec: &str) -> Option<(String, SocketAddr)> {
+    let parts: Vec<&str> = spec.split(':').collect();
+    match parts.as_slice() {
+        [host, ip] => {
+            let ip: IpAddr = ip.parse().ok()?;
+            Some(((*host).to_string(), SocketAddr::new(ip, 443)))
+        }
+        [host, port, ip] => {
+            let port: u16 = port.parse().ok()?;
+            let ip: IpAddr = ip.parse().ok()?;
+            Some(((*host).to_string(), SocketAddr::new(ip, port)))
+        }
+        _ => None,
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let emulation = resolve_emulation(args.emulation.as_deref());
 
-    let client = Client::builder()
-        .emulation(emulation)
-        .build()?;
+    let Some(url) = args.url.clone() else {
+        let (profile, platform) = select_profile(args.emulation.as_deref());
+        banner(&args, &profile, platform);
+        return Ok(());
+    };
+
+    let mut builder = Client::builder().emulation(emulation);
+
+    if args.insecure {
+        builder = builder
+            .tls_cert_verification(false)
+            .tls_verify_hostname(false);
+    }
+
+    for spec in &args.resolve {
+        match parse_resolve(spec) {
+            Some((host, addr)) => {
+                builder = builder.resolve(host, addr);
+            }
+            None => {
+                return Err(format!("invalid --resolve '{spec}', expected host:ip or host:port:ip").into());
+            }
+        }
+    }
+
+    if let Some(proxy_url) = &args.proxy {
+        let proxy = Proxy::all(proxy_url.as_str())
+            .map_err(|e| format!("invalid --proxy '{proxy_url}': {e}"))?;
+        builder = builder.proxy(proxy);
+    }
+
+    let client = builder.build()?;
 
     let mut req = match args.method.to_uppercase().as_str() {
-        "POST" => client.post(&args.url),
-        "PUT" => client.put(&args.url),
-        "DELETE" => client.delete(&args.url),
-        "HEAD" => client.head(&args.url),
-        _ => client.get(&args.url),
+        "POST" => client.post(&url),
+        "PUT" => client.put(&url),
+        "DELETE" => client.delete(&url),
+        "HEAD" => client.head(&url),
+        _ => client.get(&url),
     };
 
     for h in args.headers {
         if let Some((k, v)) = h.split_once(':') {
             req = req.header(k.trim(), v.trim());
         }
+    }
+
+    if !args.cookies.is_empty() {
+        req = req.header("Cookie", args.cookies.join("; "));
     }
 
     if let Some(body) = args.data {
