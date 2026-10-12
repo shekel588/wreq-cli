@@ -71,11 +71,12 @@ fn host_platform() -> Platform {
     }
 }
 
-fn platform_name(platform: Platform) -> &'static str {
+fn platform_name(platform: Platform) -> String {
     match platform {
-        Platform::Windows => "Windows",
-        Platform::MacOS => "macOS",
-        Platform::Linux => "Linux",
+        Platform::Windows => "Windows".into(),
+        Platform::MacOS => "macOS".into(),
+        Platform::Linux => "Linux".into(),
+        _ => "host OS".into(),
     }
 }
 
