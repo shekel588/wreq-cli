@@ -2,6 +2,11 @@
 
 Notable changes to wreq-cli. Format follows [Keep a Changelog](https://keepachangelog.com/); versions track `Cargo.toml` / release tags.
 
+## [0.4.4] — 2026-10-12
+
+### Fixed
+- Combined short form `-nf` (was rejected as a duplicate `--nofollow` occurrence).
+
 ## [0.4.3] — 2026-10-12
 
 ### Added

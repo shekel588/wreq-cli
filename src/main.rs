@@ -61,7 +61,7 @@ struct Args {
 
     /// Do not follow redirects (default: follow up to 10 hops).
     /// Short aliases -n and -f combine as -nf.
-    #[arg(short = 'n', long = "nofollow", short_alias = 'f')]
+    #[arg(short = 'n', long = "nofollow", short_alias = 'f', overrides_with = "nofollow")]
     nofollow: bool,
 }
 
