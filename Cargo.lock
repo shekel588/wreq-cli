@@ -1314,7 +1314,7 @@ dependencies = [
 [[package]]
 name = "wreq"
 version = "0.16.1"
-source = "git+https://github.com/0x676e67/wreq?branch=main#1e0e270d7f4570e1d3d69f60341d7255bc6fac18"
+source = "git+https://github.com/0x676e67/wreq?branch=main#d2268c4d54ee40a518066c92f30bab9516764663"
 dependencies = [
  "btls",
  "btls-sys",
@@ -1350,7 +1350,7 @@ dependencies = [
 
 [[package]]
 name = "wreq-cli"
-version = "0.4.6"
+version = "0.4.7"
 dependencies = [
  "clap",
  "serde_json",
