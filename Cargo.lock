@@ -147,7 +147,7 @@ dependencies = [
 [[package]]
 name = "btls"
 version = "0.5.6"
-source = "git+https://github.com/0x676e67/btls?branch=main#6659346432d4e0fb74eda53542e542de25f042e3"
+source = "git+https://github.com/0x676e67/btls?branch=main#c80f66d76a0e852963c9234c92718fadeb6eb773"
 dependencies = [
  "bitflags",
  "btls-sys",
@@ -159,7 +159,7 @@ dependencies = [
 [[package]]
 name = "btls-sys"
 version = "0.5.6"
-source = "git+https://github.com/0x676e67/btls?branch=main#6659346432d4e0fb74eda53542e542de25f042e3"
+source = "git+https://github.com/0x676e67/btls?branch=main#c80f66d76a0e852963c9234c92718fadeb6eb773"
 dependencies = [
  "bindgen",
  "cmake",
@@ -1102,7 +1102,7 @@ dependencies = [
 [[package]]
 name = "tokio-btls"
 version = "0.5.6"
-source = "git+https://github.com/0x676e67/btls?branch=main#6659346432d4e0fb74eda53542e542de25f042e3"
+source = "git+https://github.com/0x676e67/btls?branch=main#c80f66d76a0e852963c9234c92718fadeb6eb773"
 dependencies = [
  "btls",
  "btls-sys",
@@ -1350,7 +1350,7 @@ dependencies = [
 
 [[package]]
 name = "wreq-cli"
-version = "0.4.7"
+version = "0.4.8"
 dependencies = [
  "clap",
  "serde_json",
