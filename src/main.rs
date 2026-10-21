@@ -173,7 +173,7 @@ fn err_chain(e: &(dyn std::error::Error + 'static)) -> String {
     let mut src = e.source();
     while let Some(s) = src {
         let p = s.to_string();
-        if p != *parts.last().unwrap() {
+        if !parts.contains(&p) {
             parts.push(p);
         }
         src = s.source();
