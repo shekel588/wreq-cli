@@ -1,12 +1,12 @@
 {
-  "version": "0.4.11",
+  "version": "6.0.0-rc.31.1",
   "description": "Fast stealth HTTP client with browser TLS & HTTP/2 impersonation",
   "homepage": "https://github.com/shekel588/wreq-cli",
   "license": "Apache-2.0",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/shekel588/wreq-cli/releases/download/v0.4.11/wreq-windows-x64.zip",
-      "hash": "5c024ccc5622ac972df717b9483702ce8ef37b8b3ca560cfa004ee67e0a8e2cf",
+      "url": "https://github.com/shekel588/wreq-cli/releases/download/v6.0.0-rc.31.1/wreq-windows-x64.zip",
+      "hash": "7148f7adcfd8d3621880ed39075db704888821be4bc797dfdfa9ec35a14cdc19",
       "bin": "wreq.exe"
     }
   },
