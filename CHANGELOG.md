@@ -2,6 +2,15 @@
 
 Notable changes to wreq-cli. Format follows [Keep a Changelog](https://keepachangelog.com/); versions track `Cargo.toml` / release tags.
 
+## [6.0.0-rc.31.2] — 2026-10-21
+
+### Changed
+- Versions now track upstream wreq release tags + own patch number (first tagged CI release: 6.0.0-rc.31.1).
+- Banner and `-e/--emulation` help now state the host-matching fingerprint is the default: agents must NOT pass `-e` on Windows.
+
+### Added
+- `README.md` — agent calling rules (fingerprint default, redirect/exit-code semantics, scheme defaulting).
+
 ## [0.4.4] — 2026-10-12
 
 ### Fixed

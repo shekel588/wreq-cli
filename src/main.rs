@@ -7,7 +7,11 @@ use wreq::{Client, Proxy};
 use wreq_util::{Emulation, Platform, Profile};
 
 #[derive(Parser, Debug)]
-#[command(name = "wreq", version, about = "Fast stealth HTTP client with browser TLS & HTTP/2 impersonation")]
+#[command(
+    name = "wreq",
+    version,
+    about = "Fast stealth HTTP client with browser TLS & HTTP/2 impersonation"
+)]
 struct Args {
     /// URL to fetch (omit to print the active fingerprint banner)
     url: Option<String>,
@@ -16,9 +20,15 @@ struct Args {
     #[arg(short = 'X', long = "method", default_value = "GET")]
     method: String,
 
-    /// Fingerprint override (e.g. chrome, chrome_154, chrome_137, firefox, safari, edge)
-    /// Default: Chrome 154 matching host OS
-    #[arg(short = 'e', long = "emulation", alias = "impersonate", short_alias = 'i')]
+    /// Fingerprint override. DEFAULT: Chrome profile matching the host OS — already ON.
+    /// Do NOT pass -e on Windows (or any host): it is enabled by default.
+    /// Use only to cross-impersonate: firefox | safari | edge | chrome_137.
+    #[arg(
+        short = 'e',
+        long = "emulation",
+        alias = "impersonate",
+        short_alias = 'i'
+    )]
     emulation: Option<String>,
 
     /// Add custom header (e.g. -H "Authorization: Bearer xxx")
@@ -61,7 +71,12 @@ struct Args {
 
     /// Do not follow redirects (default: follow up to 10 hops).
     /// Short aliases -n and -f combine as -nf.
-    #[arg(short = 'n', long = "nofollow", short_alias = 'f', overrides_with = "nofollow")]
+    #[arg(
+        short = 'n',
+        long = "nofollow",
+        short_alias = 'f',
+        overrides_with = "nofollow"
+    )]
     nofollow: bool,
 }
 
@@ -108,7 +123,9 @@ fn select_profile(explicit: Option<&str>) -> (Profile, Platform) {
         Some("edge") => (Profile::Edge137, host_platform()),
         Some(custom) => {
             let p = serde_json::from_str::<Profile>(&format!("\"{}\"", custom))
-                .or_else(|_| serde_json::from_str::<Profile>(&format!("\"{}\"", custom.to_lowercase())))
+                .or_else(|_| {
+                    serde_json::from_str::<Profile>(&format!("\"{}\"", custom.to_lowercase()))
+                })
                 .unwrap_or(Profile::Chrome154);
             (p, host_platform())
         }
@@ -131,13 +148,22 @@ fn banner(args: &Args, profile: &Profile, platform: Platform) {
         (Some(e), "custom profile") => e.as_str(),
         (Some(_), _) => "-e override",
     };
-    println!("wreq {} — stealth HTTP client (browser TLS & HTTP/2 impersonation)", env!("CARGO_PKG_VERSION"));
+    println!(
+        "wreq {} — stealth HTTP client (browser TLS & HTTP/2 impersonation)",
+        env!("CARGO_PKG_VERSION")
+    );
     println!();
-    println!("  Active fingerprint : {} on {}   [{}]", name, platform_name(platform), source);
-    println!("  Override with      : -e chrome_154 | chrome_137 | firefox | safari | edge");
+    println!(
+        "  Active fingerprint : {} on {}   [{}]",
+        name,
+        platform_name(platform),
+        source
+    );
+    println!("  NOTE  : fingerprint is ON by default and matches this host.");
+    println!("          Do NOT pass -e on Windows — it is already active.");
+    println!("          -e ONLY to cross-impersonate: firefox | safari | edge | chrome_137.");
     println!();
-    println!("  Usage: wreq [OPTIONS] <URL>");
-    println!("  Help : wreq --help");
+    println!("  Usage: wreq [OPTIONS] <URL>      Help: wreq --help");
 }
 
 fn parse_resolve(spec: &str) -> Option<(String, SocketAddr)> {
@@ -219,7 +245,10 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                 builder = builder.resolve(host, addr);
             }
             None => {
-                return Err(format!("invalid --resolve '{spec}', expected host:ip or host:port:ip").into());
+                return Err(format!(
+                    "invalid --resolve '{spec}', expected host:ip or host:port:ip"
+                )
+                .into());
             }
         }
     }
@@ -236,7 +265,9 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         Policy::limited(10)
     });
 
-    let client = builder.build().map_err(|e| fail("client build failed", &e))?;
+    let client = builder
+        .build()
+        .map_err(|e| fail("client build failed", &e))?;
 
     let mut req = match args.method.to_uppercase().as_str() {
         "POST" => client.post(&url),
@@ -276,16 +307,21 @@ async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         eprintln!();
     }
 
-    let bytes = resp.bytes().await.map_err(|e| fail("read body failed", &e))?;
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|e| fail("read body failed", &e))?;
 
     if let Some(out_path) = args.output {
-        let mut file = File::create(&out_path)
-            .map_err(|e| format!("cannot create '{out_path}': {e}"))?;
+        let mut file =
+            File::create(&out_path).map_err(|e| format!("cannot create '{out_path}': {e}"))?;
         file.write_all(&bytes)
             .map_err(|e| format!("cannot write '{out_path}': {e}"))?;
         eprintln!("Saved to {}", out_path);
     } else {
-        std::io::stdout().write_all(&bytes).map_err(|e| fail("write to stdout failed", &e))?;
+        std::io::stdout()
+            .write_all(&bytes)
+            .map_err(|e| fail("write to stdout failed", &e))?;
     }
 
     Ok(())
