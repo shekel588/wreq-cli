@@ -190,11 +190,20 @@ fn fail(what: &str, e: &(dyn std::error::Error + 'static)) -> Box<dyn std::error
 async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let emulation = resolve_emulation(args.emulation.as_deref());
 
-    let Some(url) = args.url.clone() else {
+    let Some(mut url) = args.url.clone() else {
         let (profile, platform) = select_profile(args.emulation.as_deref());
         banner(&args, &profile, platform);
         return Ok(());
     };
+
+    // Default the scheme: https normally, http with -k (local/dev origins).
+    if !url.contains("://") {
+        url = if args.insecure {
+            format!("http://{url}")
+        } else {
+            format!("https://{url}")
+        };
+    }
 
     let mut builder = Client::builder().emulation(emulation);
 
