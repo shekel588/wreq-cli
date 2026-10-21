@@ -121,14 +121,21 @@ jobs:
       - name: Cache Cargo Dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Build Release Binary
-        run: cargo build --release
+      - name: Build & Test Release Binary
+        env:
+          RUSTFLAGS: "-C link-arg=/OPT:REF -C link-arg=/OPT:ICF"
+        run: |
+          cargo test --release
+          cargo build --release
 
-      - name: Verify Binary
+      - name: Verify Binary & Size
         shell: pwsh
         run: |
+          $exe = Get-Item target/release/wreq.exe
           $ver = .\target\release\wreq.exe --version
-          Write-Host "Verified binary: $ver"
+          Write-Host "Verified binary: $ver ($($exe.Length) bytes)"
+          .\target\release\wreq.exe
+          .\target\release\wreq.exe -I -m 10 https://example.com
 
       - name: Package Release Assets & Compute Hashes
         id: pkg
