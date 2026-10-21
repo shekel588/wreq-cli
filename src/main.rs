@@ -20,13 +20,13 @@ use wreq_util::{Emulation, Platform, Profile};
     name = "wreq",
     version,
     about = "Fast stealth HTTP client — behaves 100% identically to Chrome by default (TLS, HTTP/2, headers & order)",
-    after_help = "DEFAULT CHROME BEHAVIOR:\n  \
-        By default, `wreq <URL>` acts 100% identically to a real Chrome browser on your OS:\n  \
+    after_help = "Default Chrome behavior:\n  \
+        By default, `wreq <URL>` acts identically to a real Chrome browser on your OS:\n  \
         it sends the exact Chrome TLS ClientHello (JA3/JA4 + Chromium Trust Anchor IDs),\n  \
         HTTP/2 SETTINGS/WINDOW_UPDATE/PRIORITY frames, the full set and exact order of\n  \
         standard Chrome headers (User-Agent, Sec-CH-UA*, Sec-Fetch-*, Accept*, etc.),\n  \
         follows up to 10 redirects with Referer handling, and keeps session cookies across hops.\n  \
-        Any CLI flags below (-A, -H, --http1.1, --tlsv1.2, --raw, -nf, etc.), ONLY when\n  \
+        Any CLI flags below (-A, -H, --http1.1, --tlsv1.2, --raw, -nf, etc.), only when\n  \
         passed explicitly, selectively override the corresponding part of the default Chrome preset."
 )]
 struct Args {
@@ -38,8 +38,8 @@ struct Args {
     #[arg(short = 'X', long = "method", alias = "request")]
     method: Option<String>,
 
-    /// Fingerprint override. DEFAULT: Chrome profile matching the host OS — already ON.
-    /// Do NOT pass -e on Windows (or any host): it is enabled by default.
+    /// Fingerprint override. Default: Chrome profile matching the host OS (already enabled).
+    /// Do not pass -e on Windows (or any host): it is enabled by default.
     /// Use only to cross-impersonate: firefox | safari | edge | chrome_137.
     #[arg(
         short = 'e',
@@ -396,14 +396,14 @@ fn banner(args: &Args, profile: &Profile, platform: Platform) {
         platform_name(platform),
         source
     );
-    println!("  DEFAULT BEHAVIOR   : Acts 100% identically to real Chrome on this OS.");
+    println!("  Default behavior   : Acts identically to real Chrome on this OS.");
     println!("                       Sends full Chrome headers & header order (User-Agent,");
     println!("                       Sec-CH-UA*, Sec-Fetch-*, Accept*, etc.), Chrome TLS");
     println!("                       ClientHello (with Chromium Trust Anchor IDs), and HTTP/2");
     println!("                       frames. Follows redirects and persists session cookies.");
-    println!("  OVERRIDES          : Do NOT pass -e on Windows — Chrome is already active.");
+    println!("  Overrides          : Do not pass -e on Windows — Chrome is already active.");
     println!("                       Flags like -A, -H, --http1.1, --tlsv1.2, --raw, -nf");
-    println!("                       ONLY override the corresponding Chrome default when");
+    println!("                       override the corresponding Chrome default only when");
     println!("                       passed explicitly.");
     println!();
     println!("  Usage: wreq [OPTIONS] <URL>      Help: wreq --help");

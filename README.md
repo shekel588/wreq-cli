@@ -14,7 +14,7 @@ By default, calling `wreq <URL>` with no extra flags behaves **in exact accordan
 
 ## Agent rules (read before calling)
 
-- Call as plain `wreq <URL>`. **NEVER pass `-e/--emulation` on Windows** — the Chrome profile matching the host OS is the default and already active. Use `-e firefox|safari|edge|chrome_137` only to cross-impersonate another OS/browser.
+- Call as plain `wreq <URL>`. **Do not pass `-e/--emulation` on Windows** — the Chrome profile matching the host OS is the default and already active. Use `-e firefox|safari|edge|chrome_137` only to cross-impersonate another OS/browser.
 - Exit codes: **0** = done, including HTTP 4xx/5xx (parse `-v`/`-I` output for the status). **1** = any error — transport failure, timeout, invalid `--resolve`/`--proxy`, output I/O.
 - Status badges (`-I` / `-v`): The 3-digit HTTP status code is highlighted with an inverted ANSI badge:
   - **Green** (`200..=299`): Success
