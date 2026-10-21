@@ -634,7 +634,11 @@ fn main() -> std::process::ExitCode {
     match run(args, use_color) {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("{}", format_error_line(&e.to_string(), use_color));
+            let _ = writeln!(
+                std::io::stderr(),
+                "{}",
+                format_error_line(&e.to_string(), use_color)
+            );
             std::process::ExitCode::FAILURE
         }
     }
@@ -1026,14 +1030,15 @@ async fn run(args: Args, use_color: bool) -> Result<(), Box<dyn std::error::Erro
     let headers = resp.headers().clone();
 
     if args.head_only || args.include_headers {
-        eprintln!("{}", format_status_line(version, status, use_color));
+        let mut stderr = std::io::stderr().lock();
+        let _ = writeln!(stderr, "{}", format_status_line(version, status, use_color));
         for (k, v) in headers.iter() {
-            eprintln!("{}: {}", k, v.to_str().unwrap_or(""));
+            let _ = writeln!(stderr, "{}: {}", k, v.to_str().unwrap_or(""));
         }
         if args.head_only {
             return Ok(());
         }
-        eprintln!();
+        let _ = writeln!(stderr);
     }
 
     let bytes = resp
@@ -1046,11 +1051,11 @@ async fn run(args: Args, use_color: bool) -> Result<(), Box<dyn std::error::Erro
             File::create(&out_path).map_err(|e| format!("cannot create '{out_path}': {e}"))?;
         file.write_all(&bytes)
             .map_err(|e| format!("cannot write '{out_path}': {e}"))?;
-        eprintln!("Saved to {}", out_path);
-    } else {
-        std::io::stdout()
-            .write_all(&bytes)
-            .map_err(|e| fail("write to stdout failed", &e))?;
+        let _ = writeln!(std::io::stderr(), "Saved to {}", out_path);
+    } else if let Err(e) = std::io::stdout().write_all(&bytes) {
+        if e.kind() != std::io::ErrorKind::BrokenPipe {
+            return Err(fail("write to stdout failed", &e));
+        }
     }
 
     Ok(())
