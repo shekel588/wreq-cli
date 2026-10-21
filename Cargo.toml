@@ -1,6 +1,6 @@
 [package]
 name = "wreq-cli"
-version = "6.0.0-rc.31.2"
+version = "6.0.0-rc.31.3"
 edition = "2021"
 description = "Fast stealth HTTP client with browser TLS & HTTP/2 impersonation"
 
