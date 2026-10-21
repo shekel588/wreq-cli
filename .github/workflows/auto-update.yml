@@ -58,6 +58,25 @@ jobs:
             exit 0
           fi
 
+          # Gate: release only when the resolved wreq commit IS an upstream
+          # release. Following the main tip means every upstream commit
+          # (docs/CI included) triggered a version bump.
+          NEW_WREQ_HASH=$(awk '/^name = "wreq"$/{f=1;next} f&&/^source = /{print;exit}' Cargo.lock | sed 's/.*#//; s/"$//')
+          LATEST_TAG=$(git ls-remote --tags https://github.com/0x676e67/wreq | grep -v '\^{}' | awk '{print $2}' | sed 's|refs/tags/||' | sort -V | tail -1)
+          # Prefer the stable tag when it exists for the same line (v6.0.0 over v6.0.0-rc.N)
+          BASE_TAG=${LATEST_TAG%%-*}
+          if git ls-remote https://github.com/0x676e67/wreq "refs/tags/$BASE_TAG" | grep -q "refs/tags/$BASE_TAG"; then
+            LATEST_TAG=$BASE_TAG
+          fi
+          PEELED=$(git ls-remote https://github.com/0x676e67/wreq "refs/tags/${LATEST_TAG}^{}" | awk '{print $1}')
+          TAG_COMMIT="${PEELED:-$(git ls-remote https://github.com/0x676e67/wreq "refs/tags/${LATEST_TAG}" | awk '{print $1}')}"
+
+          if [ "${{ github.event.inputs.force_release }}" != "true" ] && [ "$NEW_WREQ_HASH" != "$TAG_COMMIT" ]; then
+            echo "Upstream main (${NEW_WREQ_HASH:0:7}) has no matching release tag (${LATEST_TAG} = ${TAG_COMMIT:0:7}). Skipping release."
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           echo "Relevant upstream change detected!"
           echo "should_release=true" >> $GITHUB_OUTPUT
 

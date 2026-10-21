@@ -156,9 +156,38 @@ fn parse_resolve(spec: &str) -> Option<(String, SocketAddr)> {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> std::process::ExitCode {
     let args = Args::parse();
+    match run(args) {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("wreq: {e}");
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+/// One-line cause chain (Display only, no Debug internals).
+fn err_chain(e: &(dyn std::error::Error + 'static)) -> String {
+    let mut parts = vec![e.to_string()];
+    let mut src = e.source();
+    while let Some(s) = src {
+        let p = s.to_string();
+        if p != *parts.last().unwrap() {
+            parts.push(p);
+        }
+        src = s.source();
+    }
+    parts.join(": ")
+}
+
+/// Attach a short "what failed" context to an error.
+fn fail(what: &str, e: &(dyn std::error::Error + 'static)) -> Box<dyn std::error::Error> {
+    format!("{what}: {}", err_chain(e)).into()
+}
+
+#[tokio::main]
+async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let emulation = resolve_emulation(args.emulation.as_deref());
 
     let Some(url) = args.url.clone() else {
@@ -198,7 +227,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Policy::limited(10)
     });
 
-    let client = builder.build()?;
+    let client = builder.build().map_err(|e| fail("client build failed", &e))?;
 
     let mut req = match args.method.to_uppercase().as_str() {
         "POST" => client.post(&url),
@@ -222,7 +251,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         req = req.body(body);
     }
 
-    let resp = req.send().await?;
+    let resp = req.send().await.map_err(|e| fail("request failed", &e))?;
     let status = resp.status();
     let version = resp.version();
     let headers = resp.headers().clone();
@@ -238,14 +267,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!();
     }
 
-    let bytes = resp.bytes().await?;
+    let bytes = resp.bytes().await.map_err(|e| fail("read body failed", &e))?;
 
     if let Some(out_path) = args.output {
-        let mut file = File::create(&out_path)?;
-        file.write_all(&bytes)?;
+        let mut file = File::create(&out_path)
+            .map_err(|e| format!("cannot create '{out_path}': {e}"))?;
+        file.write_all(&bytes)
+            .map_err(|e| format!("cannot write '{out_path}': {e}"))?;
         eprintln!("Saved to {}", out_path);
     } else {
-        std::io::stdout().write_all(&bytes)?;
+        std::io::stdout().write_all(&bytes).map_err(|e| fail("write to stdout failed", &e))?;
     }
 
     Ok(())
